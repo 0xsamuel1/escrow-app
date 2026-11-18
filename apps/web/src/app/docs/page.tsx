@@ -1,6 +1,11 @@
+import { apiGet, symbolForToken, type PublicConfig } from '@/lib/api';
+
 export const metadata = { title: 'How it works · SkillEscrow' };
 
-export default function Docs() {
+export default async function Docs() {
+  const config = await apiGet<PublicConfig>('/config');
+  const fee = config ? `${config.feeBps / 100}%` : 'the configured fee';
+  const token = config ? symbolForToken(Object.values(config.tokens)[0] ?? '', config) : 'the configured token';
   return (
     <>
       <p className="eyebrow" style={{ marginTop: '2.5rem' }}>Docs</p>
@@ -12,7 +17,7 @@ export default function Docs() {
           <h2>Maintainers</h2>
           <ol className="flow">
             <li><span><strong>Install the GitHub App</strong>Add it to the repositories you want to fund.</span></li>
-            <li><span><strong>Comment <code>/bounty 50 USDC 14d</code></strong>On any open issue. The bot replies with a funding link.</span></li>
+            <li><span><strong>Comment <code>/bounty 50 {token} 14d</code></strong>On any open issue. The bot replies with a funding link.</span></li>
             <li><span><strong>Sign once in Freighter</strong>The funds move into the escrow contract, not to us.</span></li>
             <li><span><strong>Merge the PR you like</strong>Its author is paid within seconds. Nothing merged by the deadline? Reclaim it after the grace period.</span></li>
           </ol>
@@ -29,7 +34,7 @@ export default function Docs() {
 
       <h2>Fees and trust</h2>
       <div className="two">
-        <p>The fee is <strong>3%</strong> of the payout, charged to the maintainer. Refunds are free.</p>
+        <p>The fee is <strong>{fee}</strong> of the payout, charged to the maintainer. Refunds are free.</p>
         <p>Funds sit in a Soroban contract on Stellar. A relayer may release a bounty only if its maintainer opted in. The AI review never moves money, and disputes go to a human arbiter.</p>
       </div>
     </>

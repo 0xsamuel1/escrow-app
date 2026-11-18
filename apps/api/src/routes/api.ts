@@ -17,6 +17,7 @@ export interface ApiDeps {
   chain?: FundingChain & AdminChain;
   /** enables GitHub sign-in (/auth/login, /auth/callback) */
   login?: LoginDeps;
+  publicConfig?: { feeBps: number; tokens: Record<string, string> };
 }
 
 const err = (r: FastifyReply, status: number, code: string, message: string) => r.code(status).send({ error: { code, message } });
@@ -41,6 +42,8 @@ export function registerApi(app: FastifyInstance, d: ApiDeps) {
     preHandler: async (req: FastifyRequest, reply: FastifyReply) => requireUser(req as Authed, reply, mutating),
   });
   const mutationLimit = limit(20);
+
+  app.get('/config', async () => d.publicConfig ?? { feeBps: 300, tokens: {} });
 
   if (d.login) {
     const login = d.login;
@@ -111,6 +114,7 @@ export function registerApi(app: FastifyInstance, d: ApiDeps) {
     token: z.string().optional(),
     minAmount: z.string().regex(/^\d+$/).optional(),
     q: z.string().max(100).optional(),
+    repo: z.string().max(100).optional(),
     sort: z.enum(['newest', 'highest', 'ending']).default('newest'),
     cursor: z.string().regex(/^\d{1,18}$/).optional(),
     limit: z.coerce.number().int().min(1).max(50).default(20),
@@ -125,6 +129,7 @@ export function registerApi(app: FastifyInstance, d: ApiDeps) {
         ...(f.token ? { token: f.token } : {}),
         ...(f.minAmount ? { amount: { gte: f.minAmount } } : {}),
         ...(f.q ? { OR: [{ issueTitle: { contains: f.q, mode: 'insensitive' as const } }, { repo: { fullName: { contains: f.q, mode: 'insensitive' as const } } }] } : {}),
+        ...(f.repo ? { repo: { fullName: { contains: f.repo, mode: 'insensitive' as const } } } : {}),
       },
       orderBy: f.sort === 'highest' ? [{ amount: 'desc' }, { id: 'desc' }] : f.sort === 'ending' ? [{ deadline: 'asc' }, { id: 'desc' }] : [{ id: 'desc' }],
       include: { repo: { select: { fullName: true } }, _count: { select: { prs: true } } },

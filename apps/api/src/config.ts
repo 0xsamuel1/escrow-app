@@ -32,6 +32,7 @@ const schema = z.object({
   ALERT_WEBHOOK_URL: z.string().url().optional(),
   TOKEN_USDC_CONTRACT_ID: z.string().default(''),
   TOKEN_XLM_CONTRACT_ID: z.string().default(''),
+  BOUNTY_FEE_BPS: z.coerce.number().int().min(0).max(10_000).default(300),
 }).refine((c) => {
   const set = [c.GITHUB_APP_ID, c.GITHUB_APP_SLUG, c.GITHUB_APP_PRIVATE_KEY, c.GITHUB_CLIENT_ID, c.GITHUB_CLIENT_SECRET].filter(Boolean).length;
   return set === 0 || set === 5;

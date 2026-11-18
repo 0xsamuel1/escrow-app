@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import pg from 'pg';
 import { E2E_DB } from '../playwright.config.js';
+import { installFakeWallet } from '../fake-wallet.js';
 
 const sessions = () => JSON.parse(readFileSync(new URL('../.sessions.json', import.meta.url), 'utf8')) as { user: string; admin: string };
 const signIn = (page: Page, who: 'user' | 'admin') =>
@@ -94,6 +95,17 @@ test.describe('account', () => {
 });
 
 test.describe('funding page', () => {
+  test('signed funding flow uses the scripted wallet and submits the transaction', async ({ page }) => {
+    await installFakeWallet(page);
+    await page.route('**/api/auth/me', async (route) => route.fulfill({ json: { csrfToken: 'csrf', login: 'maint', wallet: null } }));
+    await page.route('**/api/intents/intent-open-0000001', async (route) => route.fulfill({ json: { state: 'open', repo: 'acme/widgets', issueNumber: 7, token: 'CUSDCE2E', amount: '500000000', durationDays: 14, bountyId: null } }));
+    await page.route('**/api/intents/intent-open-0000001/build', async (route) => route.fulfill({ json: { xdr: 'unsigned-xdr' } }));
+    await page.route('**/api/tx/submit', async (route) => route.fulfill({ json: { hash: 'fake-hash' } }));
+    await page.goto('/fund/intent-open-0000001');
+    await page.getByRole('button', { name: 'Connect wallet and fund' }).click();
+    await expect(page.getByRole('button', { name: 'Waiting for confirmation…' })).toBeVisible();
+  });
+
   test('open, expired and used links', async ({ page }) => {
     await signIn(page, 'user');
     await page.goto('/fund/intent-open-0000001');

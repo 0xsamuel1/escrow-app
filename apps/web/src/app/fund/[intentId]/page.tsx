@@ -1,6 +1,7 @@
 'use client';
 import { use, useCallback, useEffect, useState } from 'react';
 import { fromBaseUnits } from '@skillescrow/shared/src/amounts';
+import { symbolForToken, type PublicConfig } from '@/lib/api';
 import { errorText } from '@/lib/errors';
 import { connect, signTx, WalletUxError } from '@/lib/freighter';
 
@@ -14,13 +15,14 @@ export default function Fund({ params }: { params: Promise<{ intentId: string }>
   const [auto, setAuto] = useState(true);
   const [step, setStep] = useState<'idle' | 'signing' | 'waiting'>('idle');
   const [err, setErr] = useState<string | null>(null);
+  const [config, setConfig] = useState<PublicConfig | null>(null);
 
   const load = useCallback(async () => {
     const r = await fetch(`/api/intents/${encodeURIComponent(intentId)}`);
     setIntent(r.ok ? ((await r.json()) as Intent) : null);
   }, [intentId]);
 
-  useEffect(() => { void load(); fetch('/api/auth/me').then((r) => (r.ok ? r.json() : null)).then((m) => setCsrf(m?.csrfToken ?? null), () => setCsrf(null)); }, [load]);
+  useEffect(() => { void load(); fetch('/api/config').then((r) => (r.ok ? r.json() : null)).then(setConfig, () => setConfig(null)); fetch('/api/auth/me').then((r) => (r.ok ? r.json() : null)).then((m) => setCsrf(m?.csrfToken ?? null), () => setCsrf(null)); }, [load]);
 
   // after submitting, wait for the indexer to mark the intent used, then go to the bounty
   useEffect(() => {
@@ -57,12 +59,13 @@ export default function Fund({ params }: { params: Promise<{ intentId: string }>
   if (intent === undefined) return <p className="muted">Loading…</p>;
   if (intent === null) return <><h1>Funding link not found</h1><p className="muted">Check the link, or comment <code>/bounty</code> on the issue again.</p></>;
   const amount = fromBaseUnits(BigInt(intent.amount), 7, 2);
+  const token = symbolForToken(intent.token, config);
   return (
     <>
       <p className="eyebrow" style={{ marginTop: '2.5rem' }}>{intent.repo ?? 'repository'} #{intent.issueNumber}</p>
       <h1>Fund bounty</h1>
       <section className="panel">
-      <p className="big locked" style={{ display: 'inline-block', margin: 0 }}>{amount}</p>
+      <p className="big locked" style={{ display: 'inline-block', margin: 0 }}>{amount} {token}</p>
       <p className="muted">Held in escrow for {intent.durationDays} days, then refundable if nothing is merged.</p>
       {intent.state === 'expired' && <p className="error" role="alert">{errorText('intent_expired', 'Expired.')}</p>}
       {intent.state === 'used' && <p className="ok">{errorText('intent_used', 'Funded.')} {intent.bountyId && <a href={`/b/${intent.bountyId}`}>View the bounty</a>}</p>}
@@ -73,7 +76,7 @@ export default function Fund({ params }: { params: Promise<{ intentId: string }>
           <p className="muted">{auto ? 'A relayer may release this bounty when you merge, capped by the escrow limits.' : 'You will sign the release yourself after merging.'}</p>
           <button onClick={fund} disabled={!csrf || step !== 'idle'}>{step === 'signing' ? 'Confirm in Freighter…' : step === 'waiting' ? 'Waiting for confirmation…' : 'Connect wallet and fund'}</button>
           {err && <p className="error" role="alert">{err}</p>}
-          <p className="muted small">You need a USDC trustline on your account for USDC bounties. We never ask for your secret key.</p>
+          <p className="muted small">You need a trustline for {token} on your account. We never ask for your secret key.</p>
         </>
       )}
       </section>

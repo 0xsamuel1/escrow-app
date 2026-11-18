@@ -3,9 +3,10 @@ import { fromBaseUnits } from '@skillescrow/shared/src/amounts';
 const API = process.env.API_INTERNAL_URL ?? 'http://localhost:3001';
 
 export interface BountySummary {
-  id: string; issueNumber: number; issueTitle: string; issueUrl: string; amount: string; token: string; status: string;
+  id: string; issueNumber: number; issueTitle: string; issueUrl: string; amount: string; token: string; status: string; feeBps: number;
   deadline: string; createdAt: string; repo: { fullName: string }; _count: { prs: number };
 }
+export interface PublicConfig { feeBps: number; tokens: Record<string, string> }
 
 /** Server-side fetch of the public API. Returns null on any failure so pages render an error state. */
 export async function apiGet<T>(path: string): Promise<T | null> {
@@ -25,7 +26,20 @@ export function symbolFor(token: string): string {
   return map[token] ?? `${token.slice(0, 4)}…`;
 }
 
+export function symbolForToken(token: string, config?: PublicConfig | null): string {
+  const entry = Object.entries(config?.tokens ?? {}).find(([, address]) => address === token);
+  return entry?.[0] ?? symbolFor(token);
+}
+
 export const money = (amount: string, token: string) => `${fromBaseUnits(BigInt(amount), 7, 2)} ${symbolFor(token)}`;
+
+/** Decimal user input to token base units without lossy Number conversion. */
+export function parseAmount(value: string, decimals = 7): string | null {
+  if (!/^\d+(?:\.\d+)?$/.test(value)) return null;
+  const [whole, fraction = ''] = value.split('.');
+  if (fraction.length > decimals) return null;
+  return (BigInt(whole!) * 10n ** BigInt(decimals) + BigInt((fraction + '0'.repeat(decimals)).slice(0, decimals))).toString();
+}
 
 export function daysLeft(deadline: string, now = Date.now()): string {
   const ms = new Date(deadline).getTime() - now;
