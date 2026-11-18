@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react';
 import { fromBaseUnits } from '@skillescrow/shared/src/amounts';
 import { errorText } from '@/lib/errors';
-import { connect, signLinkMessage, signTx, WalletUxError } from '@/lib/freighter';
+import { refundWindow, explorerTx } from '@/lib/api';
+import { connect, signLinkMessage, signTx, WalletUxError } from '@/lib/wallet';
 
 interface Funded { id: string; issueTitle: string; amount: string; status: string; deadline: string }
 interface Me { login: string; wallet: string | null; csrfToken: string }
@@ -13,6 +14,7 @@ export default function Account() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [funded, setFunded] = useState<Funded[]>([]);
+  const [submitted, setSubmitted] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/auth/me').then((r) => (r.ok ? r.json() : null)).then(setMe, () => setMe(null));
@@ -32,8 +34,10 @@ export default function Account() {
       if (!b.ok) throw new WalletUxError(errorText(bj.error?.code, bj.error?.message ?? 'Could not prepare the transaction.'));
       const signed = await signTx(bj.xdr, address, PASSPHRASE);
       const s = await fetch('/api/tx/submit', { method: 'POST', headers: h, body: JSON.stringify({ xdr: signed, address }) });
+      const sj = await s.json();
       if (!s.ok) throw new WalletUxError('The network rejected the transaction.');
-      setMsg({ ok: true, text: `${kind === 'release' ? 'Release' : 'Refund'} submitted. The status updates once it confirms.` });
+      setSubmitted(sj.hash ?? null);
+      setMsg({ ok: true, text: `${kind === 'release' ? 'Release' : 'Refund'} submitted and is being confirmed.` });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof WalletUxError ? e.message : 'Something went wrong. Please try again.' });
     } finally { setBusy(false); }
@@ -79,9 +83,10 @@ export default function Account() {
         <div key={f.id} className="card">
           <div className="row"><a href={`/b/${f.id}`}>{f.issueTitle || `Bounty ${f.id}`}</a><span className="badge">{f.status}</span></div>
           <div className="row muted"><span className="amount">{fromBaseUnits(BigInt(f.amount), 7, 2)}</span>
-            {f.status === 'OPEN' && <span><button disabled={busy} onClick={() => act(f.id, 'release')}>Release</button> <button className="ghost" disabled={busy} onClick={() => act(f.id, 'refund')}>Refund</button></span>}</div>
+            {f.status === 'OPEN' && <span><button disabled={busy} onClick={() => act(f.id, 'release')}>Release</button> {refundWindow(f.deadline).open ? <button className="ghost" disabled={busy} onClick={() => act(f.id, 'refund')}>Refund</button> : <small>{refundWindow(f.deadline).label}</small>}</span>}</div>
         </div>
       ))}
+      {submitted && <p className="muted" role="status">Tracking confirmation… <a href={explorerTx(submitted)} rel="noreferrer noopener">View transaction ↗</a></p>}
       <p className="muted">We never ask for your secret key; you only sign a message in Freighter.</p>
     </>
   );

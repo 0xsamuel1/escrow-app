@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { apiGet, daysLeft, explorerTx, money } from '@/lib/api';
+import { apiGetResult, daysLeft, explorerTx, money } from '@/lib/api';
 
 interface Review { verdict: string; score: number; flags: string[] }
 interface Detail {
@@ -33,8 +33,10 @@ function progress(b: Detail): number {
 
 export default async function Bounty({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const b = await apiGet<Detail>(`/bounties/${encodeURIComponent(id)}`);
-  if (!b) notFound();
+  const response = await apiGetResult<Detail>(`/bounties/${encodeURIComponent(id)}`);
+  if (response.kind === 'not_found') notFound();
+  if (response.kind === 'unavailable') return <><h1>Temporarily unavailable</h1><p className="muted">The bounty service is unavailable. This is not a missing page; please retry shortly.</p></>;
+  const b = response.data;
   const prs = [...b.prs].sort((x, y) => {
     const rx = x.reviews[0], ry = y.reviews[0];
     return (ORDER.indexOf(rx?.verdict ?? 'needs_human') - ORDER.indexOf(ry?.verdict ?? 'needs_human')) || ((ry?.score ?? 0) - (rx?.score ?? 0));

@@ -17,6 +17,22 @@ export async function apiGet<T>(path: string): Promise<T | null> {
   }
 }
 
+/** Distinguishes an unavailable API from an actual missing resource. */
+export async function apiGetResult<T>(path: string): Promise<{ kind: 'ok'; data: T } | { kind: 'not_found' } | { kind: 'unavailable' }> {
+  try {
+    const r = await fetch(`${API}${path}`, { cache: 'no-store' });
+    if (r.ok) return { kind: 'ok', data: (await r.json()) as T };
+    return r.status === 404 ? { kind: 'not_found' } : { kind: 'unavailable' };
+  } catch { return { kind: 'unavailable' }; }
+}
+
+export function refundWindow(deadline: string, graceMs = 72 * 3600e3, now = Date.now()): { open: boolean; label: string } {
+  const ms = new Date(deadline).getTime() + graceMs - now;
+  if (ms <= 0) return { open: true, label: 'Refund window is open' };
+  const hours = Math.ceil(ms / 3600e3);
+  return { open: false, label: `Refund available in ${hours >= 48 ? `${Math.ceil(hours / 24)}d` : `${hours}h`}` };
+}
+
 // Token symbols by contract id come from the environment; unknown tokens show a short id.
 export function symbolFor(token: string): string {
   const map: Record<string, string> = {};
